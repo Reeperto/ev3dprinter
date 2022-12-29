@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 ev3dev-lang-rust = "0.12.1"
-vector2d = "2.2.0"
+cgmath = "0.18.0"
 
 [profile.release]
 lto = true

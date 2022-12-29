@@ -1,29 +1,50 @@
-mod motors;
+use std::{thread::sleep, time::Duration};
+
+use cgmath::Vector2;
+use ev3dev_lang_rust::{
+    motors::{MotorPort, TachoMotor},
+    sensors::{SensorPort, TouchSensor},
+    Ev3Result,
+};
+use printhead::{Motor, PrintHead, SensorPool};
+
+mod printhead;
 
 extern crate ev3dev_lang_rust;
 
-use std::thread::sleep;
-use std::time::Duration;
-use ev3dev_lang_rust::Ev3Result;
-use ev3dev_lang_rust::motors::MotorPort;
-use ev3dev_lang_rust::sensors::SensorPort;
-use crate::motors::AxisMotor;
-
 fn main() -> Ev3Result<()> {
+    let x_motor: Motor = Motor {
+        m: TachoMotor::get(MotorPort::OutA)?,
+        deg_mm_ratio: 5.,
+    };
 
-    let mut x_motor = AxisMotor::new(MotorPort::OutB, SensorPort::In2, 20f32, 5f32);
-    let mut y_motor = AxisMotor::new(MotorPort::OutA, SensorPort::In1, 20f32, 14.0625f32);
+    let y_motor: Motor = Motor {
+        m: TachoMotor::get(MotorPort::OutB)?,
+        deg_mm_ratio: 14.0625,
+    };
 
-    y_motor.invert(true)?;
+    let z_motor = Motor {
+        m: TachoMotor::get(MotorPort::OutC)?,
+        deg_mm_ratio: 240.,
+    };
 
-    // Calibrate Motors
-    x_motor.calibrate()?;
-    y_motor.calibrate()?;
+    let sensor_pool: SensorPool = SensorPool {
+        x: TouchSensor::get(SensorPort::In1)?,
+        y: TouchSensor::get(SensorPort::In2)?,
+        z: TouchSensor::get(SensorPort::In3)?,
+    };
 
-    sleep (Duration::new(2,0));
+    let mut printhead: PrintHead = PrintHead::new(x_motor, y_motor, z_motor, sensor_pool, 15., 1.);
 
-    x_motor.move_pos (-20.4)?;
-    y_motor.move_pos (-20.4)?;
+    printhead.calibrate_head(true, true, false, 0., -20.4, 0.)?;
+    sleep(Duration::new(1, 0));
+    printhead.reset_position()?;
+
+    printhead.goto(Vector2 { x: 20., y: 20. }, 1.)?;
+    printhead.goto(Vector2 { x: 20., y: 40. }, 1.)?;
+    printhead.goto(Vector2 { x: 40., y: 40. }, 1.)?;
+    printhead.goto(Vector2 { x: 40., y: 20. }, 1.)?;
+    printhead.goto(Vector2 { x: 20., y: 20. }, 1.)?;
 
     Ok(())
 }
