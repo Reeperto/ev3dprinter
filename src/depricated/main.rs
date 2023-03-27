@@ -10,8 +10,6 @@ use printhead::{Motor, PrintHead, SensorPool};
 
 mod printhead;
 
-extern crate ev3dev_lang_rust;
-
 fn main() -> Ev3Result<()> {
     let x_motor: Motor = Motor {
         m: TachoMotor::get(MotorPort::OutA)?,

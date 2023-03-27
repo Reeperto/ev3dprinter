@@ -1,60 +1,120 @@
 use std::{thread::sleep, time::Duration};
 
 use cgmath::Vector2;
-use ev3dev_lang_rust::{motors::TachoMotor, sensors::TouchSensor, Ev3Result};
+use ev3dev_lang_rust::{motors::LargeMotor, sensors::TouchSensor, Ev3Result};
+use lazy_static::lazy_static;
+
+lazy_static!(
+    static ref ROOT_PATH: String = "/sys/class/".to_string();
+);
 
 pub struct Motor {
-    pub m: TachoMotor,
-    pub deg_mm_ratio: f32,
+    pub m: LargeMotor,
+    pub s: TouchSensor,
+    pub ratio: f64,
+    // Potentially replace with a struct or some other structure
+    // (offset, motor inversion, sensor inversion)
+    cal_params: (f64, bool, bool),
+    cal_speed: i32,
 }
 
-pub struct SensorPool {
-    pub x: TouchSensor,
-    pub y: TouchSensor,
-    pub z: TouchSensor,
+impl Motor {
+    pub fn new(
+        m: LargeMotor,
+        s: TouchSensor,
+        ratio: f64,
+        cal_params: (f64, bool, bool),
+        cal_speed: i32,
+    ) -> Self {
+        Self {
+            m,
+            s,
+            ratio,
+            cal_params,
+            cal_speed,
+        }
+    }
+
+
+    pub fn calibrate(
+        &self,
+    ) -> Ev3Result<()> {
+        let mut calibrate_speed = self.mm_to_tacho(self.cal_speed as f64)?;
+        if self.cal_params.1 {
+            calibrate_speed *= -1;
+        }
+
+        self.m.set_speed_sp(calibrate_speed)?;
+        self.m.run_forever()?;
+        self.wait_for_press(false ^ self.cal_params.2)?;
+
+        self.m.set_speed_sp(-calibrate_speed)?;
+        self.m.run_forever()?;
+        self.wait_for_press(true ^ self.cal_params.2)?;
+
+        self.m.stop()?;
+
+        // Move to account for offset
+        self.m.run_to_rel_pos(Some(self.mm_to_tacho(self.cal_params.0)?))?;
+
+        Ok(())
+    }
+
+    pub fn mm_to_tacho(&self, measure: f64) -> Ev3Result<i32> {
+        Ok((measure * self.ratio * (self.m.get_count_per_rot()? as f64 / 360.)).round() as i32)
+    }
+
+    pub fn wait_for_press(&self, inverted: bool) -> Ev3Result<()> {
+        loop {
+            if self.s.get_pressed_state()? ^ inverted {
+                return Ok(());
+            }
+        }
+    }
+
+    // Fastest possible implentation of starting a motor to run forever
+    // Bypasses abstractions and ev3dev library to achieve fastest possible timing
+    pub fn quick_run(&self) {
+
+    }
 }
 
 pub struct PrintHead {
     pub x: Motor,
     pub y: Motor,
     pub z: Motor,
-    pub sensors: SensorPool,
-    pub base_velocity: f32,
-    pub position: Vector2<f32>,
-    pub layer: i32,
-    pub layer_height: f32,
+    pub velocity: f64,
+    pub position: Vector2<f64>
 }
 
 impl PrintHead {
-    pub fn new(
-        x: Motor,
-        y: Motor,
-        z: Motor,
-        sensors: SensorPool,
-        base_velocity: f32,
-        layer_height: f32,
-    ) -> Self {
+    pub fn new(x: Motor, y: Motor, z: Motor) -> Self {
         Self {
             x,
             y,
             z,
-            sensors,
-            base_velocity,
-            position: Vector2 { x: 0., y: 0. },
-            layer: 0,
-            layer_height,
+            position: Vector2::new(0., 0.),
+            // TODO:
+            velocity: 20.
         }
     }
 
-    pub fn goto(&mut self, mut position: Vector2<f32>, time: f32) -> Ev3Result<()> {
-        position.x = position.x.clamp(-100., 100.);
-        position.y = position.y.clamp(-100., 100.);
+    pub fn set_velocity(&mut self, velocity: f64) {
+        self.velocity = velocity;
+    }
 
-        let delta_pos: Vector2<f32> = position - self.position;
-        let velocity: Vector2<f32> = delta_pos / time;
+    pub fn goto(&mut self, mut destination: Vector2<f64>) -> Ev3Result<()> {
 
-        let x_speed: i32 = self.mm_to_tacho(&self.x, velocity.x);
-        let y_speed: i32 = self.mm_to_tacho(&self.y, velocity.y);
+        destination.x = destination.x.clamp(-100., 100.);
+        destination.y = destination.y.clamp(-100., 100.);
+
+        let delta_pos = destination - self.position;
+        let time = f64::sqrt(delta_pos.x.powi(2) + delta_pos.y.powi(2)) / self.velocity;
+
+        let velocity = delta_pos / time;
+
+        let x_speed = self.x.mm_to_tacho(velocity.x)?;
+        let y_speed = self.y.mm_to_tacho(velocity.y)?;
 
         self.x.m.set_speed_sp(x_speed)?;
         self.y.m.set_speed_sp(y_speed)?;
@@ -62,106 +122,26 @@ impl PrintHead {
         self.x.m.run_forever()?;
         self.y.m.run_forever()?;
 
-        sleep(Duration::from_secs_f32(time));
+        sleep(Duration::from_secs_f64(time));
 
         self.x.m.stop()?;
         self.y.m.stop()?;
 
-        // TODO: Implement more intelligent position logging with the absolute tacho count of the
-        // motors
-        self.position.x = position.x;
-        self.position.y = position.y;
-
-        // Prevents drifting between succesive goto calls
-        sleep(Duration::from_millis(10));
-        Ok(())
-    }
-
-    pub fn calibrate_head(
-        &self,
-        x_cal: bool,
-        y_cal: bool,
-        z_cal: bool,
-        x_offset: f32,
-        y_offset: f32,
-        z_offset: f32,
-    ) -> Ev3Result<()> {
-        if x_cal {
-            self._calibrate_motor(&self.x, &self.sensors.x, true, false, x_offset)?;
-        }
-        if y_cal {
-            self._calibrate_motor(&self.y, &self.sensors.y, true, true, y_offset)?;
-        }
-        if z_cal {
-            self._calibrate_motor(&self.z, &self.sensors.z, false, false, z_offset)?;
-        }
-        Ok(())
-    }
-
-    fn _calibrate_motor(
-        &self,
-        motor: &Motor,
-        sensor: &TouchSensor,
-        inverted_motor: bool,
-        inverted_sensor: bool,
-        offset: f32,
-    ) -> Ev3Result<()> {
-        let mut calibrate_speed = self.mm_to_tacho(&motor, self.base_velocity);
-        if inverted_motor {
-            calibrate_speed = calibrate_speed * -1;
-        }
-
-        motor.m.set_speed_sp(calibrate_speed)?;
-        motor.m.run_forever()?;
-
-        self.wait_for_press(sensor, false ^ inverted_sensor)?;
-
-        motor.m.set_speed_sp(-calibrate_speed)?;
-        motor.m.run_forever()?;
-
-        self.wait_for_press(sensor, true ^ inverted_sensor)?;
-
-        motor.m.stop()?;
-
-        motor
-            .m
-            .run_to_rel_pos(Some(self.mm_to_tacho(motor, offset)))?;
+        self.position.x = destination.x;
+        self.position.y = destination.y;
 
         Ok(())
+
     }
 
-    pub fn reset_position(&mut self) -> Ev3Result<()> {
-        self.x.m.reset()?;
-        self.y.m.reset()?;
+    pub fn calibrate(&self) -> Ev3Result<()> {
+        self.x.m.set_stop_action(LargeMotor::STOP_ACTION_BRAKE)?;
+        self.y.m.set_stop_action(LargeMotor::STOP_ACTION_BRAKE)?;
 
-        self.x.m.set_stop_action(TachoMotor::STOP_ACTION_HOLD)?;
-        self.y.m.set_stop_action(TachoMotor::STOP_ACTION_HOLD)?;
-
-        self.position = Vector2 { x: 0., y: 0. };
+        self.x.calibrate()?;
+        self.y.calibrate()?;
+        // self.z.calibrate()?;
 
         Ok(())
-    }
-
-    fn wait_for_press(&self, sensor: &TouchSensor, invert: bool) -> Ev3Result<()> {
-        loop {
-            let pressed = sensor
-                .get_pressed_state()
-                .expect("[ERROR]: Unable to get touchsensor state")
-                ^ invert;
-            if pressed {
-                return Ok(());
-            }
-        }
-    }
-
-    fn mm_to_tacho(&self, motor: &Motor, metric: f32) -> i32 {
-        (metric
-            * motor.deg_mm_ratio
-            * (motor
-                .m
-                .get_count_per_rot()
-                .expect("[ERROR]: Cannot get tacho counts per rotation") as f32
-                / 360.))
-            .round() as i32
     }
 }

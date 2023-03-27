@@ -3,11 +3,21 @@ name = "ev3dprinter"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "ev3dlib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "ev3dprinter"
+path = "src/bin/print.rs"
+
 [dependencies]
-ev3dev-lang-rust = "0.12.1"
 cgmath = "0.18.0"
+easy-error = "1.0.0"
+ev3dev-lang-rust = "*"
+lazy_static = "1.4.0"
 
 [profile.release]
 lto = true
-strip = "debuginfo"
-opt-level = "z"
+strip = true
+opt-level = 3
