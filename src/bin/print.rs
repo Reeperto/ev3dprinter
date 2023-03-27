@@ -3,7 +3,7 @@ use ev3dev_lang_rust::{
     sensors::{SensorPort, TouchSensor},
     Ev3Result,
 };
-use ev3dlib::{printhead::{Motor, PrintHead}, gcode::{parse_gcode_file, run_gcode}};
+use ev3dlib::{printhead::PrintHead, gcode::{parse_gcode_file, run_gcode}, motor::Motor};
 
 fn main() -> Ev3Result<()> {
     let x_motor = Motor::new(
