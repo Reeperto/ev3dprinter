@@ -13,9 +13,9 @@ path = "src/bin/print.rs"
 
 [dependencies]
 cgmath = "0.18.0"
+derive_builder = "0.12.0"
 easy-error = "1.0.0"
 ev3dev-lang-rust = "*"
-lazy_static = "1.4.0"
 
 [profile.release]
 lto = true

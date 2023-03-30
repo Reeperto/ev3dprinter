@@ -1,12 +1,7 @@
-use ev3dev_lang_rust::{motors::LargeMotor, sensors::TouchSensor, Ev3Result};
-use lazy_static::lazy_static;
-
-lazy_static!(
-    static ref ROOT_PATH: String = "/sys/class/".to_string();
-);
+use ev3dev_lang_rust::{motors::TachoMotor, sensors::TouchSensor, Ev3Result};
 
 pub struct Motor {
-    pub m: LargeMotor,
+    pub m: TachoMotor,
     pub s: TouchSensor,
     pub ratio: f64,
     // Potentially replace with a struct or some other structure
@@ -17,8 +12,9 @@ pub struct Motor {
 
 impl Motor {
     pub fn new(
-        m: LargeMotor,
+        m: TachoMotor,
         s: TouchSensor,
+        // In deg/mm
         ratio: f64,
         cal_params: (f64, bool, bool),
         cal_speed: i32,
@@ -67,11 +63,5 @@ impl Motor {
                 return Ok(());
             }
         }
-    }
-
-    // Fastest possible implentation of starting a motor to run forever
-    // Bypasses abstractions and ev3dev library to achieve fastest possible timing
-    pub fn quick_run(&self) {
-
     }
 }

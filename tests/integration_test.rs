@@ -1,4 +1,4 @@
-use ev3dlib::gcode::parse_gcode_file;
+use ev3dlib::gcode::parser::parse_gcode_file;
 
 #[test]
 fn test_parse_gcode_file() {

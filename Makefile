@@ -3,6 +3,12 @@ main:
 	scp ./target/armv5te-unknown-linux-musleabi/release/ev3dprinter ev3:~
 	ssh ev3 "./ev3dprinter"
 
+debug:
+	cargo build
+	scp ./target/armv5te-unknown-linux-musleabi/debug/ev3dprinter ev3:~
+	ssh ev3 "./ev3dprinter"
+
+
 upload:
 	scp ./target/armv5te-unknown-linux-musleabi/release/ev3dprinter robot@ev3dev.local:~
 
