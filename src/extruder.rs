@@ -13,7 +13,4 @@ impl Extruder {
     pub fn mm_to_tacho(&self, measure: f64) -> Ev3Result<i32> {
         Ok((measure * self.ratio * (self.m.get_count_per_rot()? as f64 / 360.)).round() as i32)
     }
-
-    // pub fn calibrate() {
-    // }
 }

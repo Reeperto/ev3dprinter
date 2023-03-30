@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{self, BufRead},
+    io::Read,
     thread::sleep,
     time::Duration,
 };
@@ -19,12 +19,12 @@ pub enum Instruction {
     Release(bool, bool, bool),
 }
 
-pub fn parse_gcode_file(filename: String) -> Result<Vec<Instruction>> {
-    let file = File::open(filename).context("Unable to read file")?;
+// TODO: Properly handle unwraps and errors. Most likely force stop parsing and execution if there
+// is an error.
+pub fn parse_gcode(gcode: String) -> Vec<Instruction> {
     let mut instructions: Vec<Instruction> = vec![];
 
-    for line in io::BufReader::new(file).lines() {
-        let line = line.context("Cannot read line of file")?;
+    for line in gcode.split('\n') {
         let command: Vec<&str> = line.split_whitespace().collect();
 
         if let Some(com) = command.first() {
@@ -61,7 +61,7 @@ pub fn parse_gcode_file(filename: String) -> Result<Vec<Instruction>> {
                             }
                             'F' => {
                                 let mut chars = param.chars();
-                                chars.next(); 
+                                chars.next();
                                 feed_rate = chars.as_str().parse::<f64>().unwrap() / 60.
                             }
                             ';' => {
@@ -96,7 +96,15 @@ pub fn parse_gcode_file(filename: String) -> Result<Vec<Instruction>> {
         }
     }
 
-    Ok(instructions)
+    instructions
+}
+
+pub fn parse_gcode_file(filename: String) -> Result<Vec<Instruction>> {
+    let mut file = File::open(filename).context("Unable to read file")?;
+    let mut gcode = String::default();
+    file.read_to_string(&mut gcode).context("Unable to read file to string")?;
+
+    Ok(parse_gcode(gcode))
 }
 
 pub fn run_gcode(printhead: &mut PrintHead, instructions: Vec<Instruction>) -> Ev3Result<()> {

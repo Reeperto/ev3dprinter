@@ -1,9 +1,16 @@
+use std::env;
+
 use ev3dev_lang_rust::{
     motors::{MotorPort, TachoMotor},
     sensors::{SensorPort, TouchSensor},
     Ev3Result,
 };
-use ev3dlib::{printhead::PrintHead, motor::Motor, gcode::parser::{run_gcode, parse_gcode_file}, extruder::Extruder};
+use ev3dlib::{
+    extruder::Extruder,
+    gcode::parser::{parse_gcode_file, run_gcode, parse_gcode},
+    motor::Motor,
+    printhead::PrintHead,
+};
 
 fn main() -> Ev3Result<()> {
     let x_motor = Motor::new(
@@ -32,21 +39,30 @@ fn main() -> Ev3Result<()> {
         // 78.5398163397 per 1 rot of wheel
         // Motor rotates 8 times for 1 rotation of wheel
         // 9.8174770425 mm per rot of motor
-        9.8174770425
+        9.8174770425,
     );
 
     e_motor.m.set_polarity(TachoMotor::POLARITY_INVERSED)?;
 
-    let mut head = PrintHead::new(
-        x_motor,
-        y_motor,
-        z_motor,
-        e_motor
-    );
+    let mut head = PrintHead::new(x_motor, y_motor, z_motor, e_motor);
 
     head.calibrate()?;
-    let instrs = parse_gcode_file("./example.gcode".to_string()).unwrap();
-    run_gcode(&mut head, instrs)?;
+
+    let args = env::args();
+
+    match args.len() {
+        1 => {
+            let instrs = parse_gcode_file("./example.gcode".to_string()).unwrap();
+            run_gcode(&mut head, instrs)?;
+        }
+        2 => {
+            let instrs = parse_gcode(args.last().unwrap());
+            run_gcode(&mut head, instrs)?;
+        }
+        _ => {
+            panic!("Improper arguments")
+        }
+    }
 
     Ok(())
 }
